@@ -55,6 +55,7 @@ export function renderStandalone(sessionFile, title) {
     agentPreset: data.header?.agentPreset || null,
     createdAt: data.header?.createdAt || 0,
     frames: data.frames,
+    redactions: data.redactions || 0,
   }
   return TEMPLATE
     .replace('__TITLE__', safeTitle.replace(/</g, '&lt;').replace(/>/g, '&gt;'))
