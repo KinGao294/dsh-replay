@@ -48,4 +48,6 @@ jobs:
 
       - name: Verify published version
         if: env.SKIP_PUBLISH != 'true'
-        run: npm view dsh-session-replay@${{ github.ref_name }} version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm view dsh-session-replay@"$VERSION" version
