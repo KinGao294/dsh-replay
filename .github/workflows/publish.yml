@@ -30,10 +30,22 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+      - name: Check version not yet published
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if npm view dsh-session-replay@"$VERSION" version >/dev/null 2>&1; then
+            echo "Version $VERSION is already published — skipping."
+            echo "SKIP_PUBLISH=true" >> "$GITHUB_ENV"
+          else
+            echo "Version $VERSION is not published yet — proceeding."
+          fi
+
       - name: Publish to npm
+        if: env.SKIP_PUBLISH != 'true'
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Verify published version
+        if: env.SKIP_PUBLISH != 'true'
         run: npm view dsh-session-replay@${{ github.ref_name }} version
