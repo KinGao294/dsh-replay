@@ -14,6 +14,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { zstdDecompressSync } from 'node:zlib'
+import { redactText } from './redact.js'
 
 const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
 
@@ -54,6 +55,8 @@ export type TimelineResult = {
   title: string | null
   frames: ReplayFrame[]
   eventCount: number
+  /** Total sensitive matches scrubbed from the timeline (for UI notice). */
+  redactions: number
 }
 
 /** One session summary entry (scanSessions). */
@@ -215,6 +218,13 @@ export function buildTimeline(events: SessionEvent[]): TimelineResult {
   const allOrdered = [...events].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
 
   let lastTime = header?.createdAt ?? 0
+  let redactions = 0
+  /** Scrub sensitive info from one text field; count matches. */
+  const scrub = (value: string): string => {
+    const r = redactText(value)
+    redactions += r.hits
+    return r.text
+  }
   const pushFrame = (frame: ReplayFrame) => {
     const t = frame.time
     frame.gapMs = lastTime ? Math.max(0, Math.min(t - lastTime, 60_000)) : 0
@@ -236,7 +246,7 @@ export function buildTimeline(events: SessionEvent[]): TimelineResult {
       pushFrame({
         kind: 'user',
         id: e.data?.id,
-        text,
+        text: scrub(text),
         sourceKind,
         system: sourceKind !== 'user', // plugin / skill-catalog injected context
         time: evtTime(e),
@@ -254,13 +264,13 @@ export function buildTimeline(events: SessionEvent[]): TimelineResult {
         .map((p: any) => ({
           callId: p.id ?? p.callId,
           name: p.name ?? 'tool',
-          arguments: p.arguments ?? p.input ?? '',
+          arguments: scrub(String(p.arguments ?? p.input ?? '')),
         }))
       pushFrame({
         kind: 'assistant',
         id: e.data?.message?.id,
-        reasoning: reasoning || null,
-        text,
+        reasoning: reasoning ? scrub(reasoning) : null,
+        text: scrub(text),
         toolCalls,
         model: e.data?.message?.source?.model ?? null,
         time: evtTime(e),
@@ -280,8 +290,10 @@ export function buildTimeline(events: SessionEvent[]): TimelineResult {
         kind: 'tool',
         callId,
         name: info.name,
-        arguments: info.arguments,
-        result: resultsByCall.get(callId ?? '')?.text ?? null,
+        arguments: scrub(String(info.arguments ?? '')),
+        result: resultsByCall.get(callId ?? '')?.text
+          ? scrub(resultsByCall.get(callId ?? '')!.text!)
+          : null,
         isError: resultsByCall.get(callId ?? '')?.isError ?? false,
         resultTime: resultsByCall.get(callId ?? '')?.time ?? 0,
         time: evtTime(e),
@@ -290,7 +302,7 @@ export function buildTimeline(events: SessionEvent[]): TimelineResult {
     }
   }
 
-  return { header, title, frames, eventCount: events.length }
+  return { header, title, frames, eventCount: events.length, redactions }
 }
 
 /** Convenience: read + decompress + build timeline from a session file path. */
