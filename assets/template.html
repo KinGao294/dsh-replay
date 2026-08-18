@@ -196,6 +196,13 @@
     text-align: center; font-size: 11px; color: var(--text-tertiary);
     padding: 4px 0 0; max-width: 820px; margin: 0 auto;
   }
+  .redact-note {
+    display: none; text-align: center; font-size: 11px;
+    color: #b45309; background: rgba(245, 158, 11, .08);
+    border: 1px solid rgba(245, 158, 11, .25);
+    border-radius: 8px; padding: 6px 12px; max-width: 820px; margin: 8px auto 0;
+  }
+  .redact-note b { font-weight: 600; }
   .empty { text-align: center; color: var(--text-tertiary); padding: 80px 0; font-size: 14px; }
 </style>
 </head>
@@ -241,6 +248,7 @@
     </div>
     <div class="stage"><div class="stage-inner" id="stage"></div></div>
     <div class="share-note">🎬 dsh-replay 会话回放 · 本文件为独立分享版，数据已内嵌，可离线打开</div>
+    <div class="redact-note" id="redactNote"></div>
     <div class="status-bar" id="statusBar"></div>
   </main>
 </div>
@@ -253,6 +261,11 @@ const TITLE = DATA.title || '会话回放';
 document.getElementById('convTitle').textContent = TITLE;
 document.title = '会话回放 · ' + TITLE;
 document.getElementById('convPreset').textContent = (DATA.agentPreset || '标准') + '模式';
+if (DATA.redactions > 0) {
+  const note = document.getElementById('redactNote');
+  note.style.display = 'block';
+  note.innerHTML = '🔒 <b>已自动脱敏 ' + DATA.redactions + ' 处敏感信息</b>（API Key / Token / 密码），原始内容未随链接外发';
+}
 if (DATA.agentPreset) {
   const p = String(DATA.agentPreset).toLowerCase();
   if (p.includes('minimal')) document.getElementById('convPreset').textContent = 'Minimal';
