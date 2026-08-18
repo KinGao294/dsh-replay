@@ -17,9 +17,61 @@ import { zstdDecompressSync } from 'node:zlib'
 
 const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
 
+/** A single event record from the session log. */
+export type SessionEvent = {
+  type: string
+  seq?: number
+  time?: number
+  time0?: number
+  data?: any
+  [key: string]: any
+}
+
+/** One replay timeline frame. */
+export type ReplayFrame = {
+  kind: 'user' | 'assistant' | 'tool'
+  time: number
+  seq: number
+  gapMs?: number
+  id?: string
+  text?: string
+  sourceKind?: string
+  system?: boolean
+  reasoning?: string | null
+  toolCalls?: { callId?: string; name?: string; arguments?: string }[]
+  model?: string | null
+  callId?: string
+  name?: string
+  arguments?: string
+  result?: string | null
+  isError?: boolean
+  resultTime?: number
+}
+
+/** Timeline build result. */
+export type TimelineResult = {
+  header: SessionEvent | null
+  title: string | null
+  frames: ReplayFrame[]
+  eventCount: number
+}
+
+/** One session summary entry (scanSessions). */
+export type SessionSummary = {
+  sessionId: string
+  projectDir: string
+  file: string
+  createdAt: number
+  cwd: string | null
+  agentPreset: string | null
+  title: string
+  eventCount: number
+  updatedAt: number
+}
+
 /** Split a concatenated Zstandard stream into frame byte ranges. */
-export function scanFrames(buf) {
-  const frames = []
+export function scanFrames(buf: Buffer): number[] {
+  const frames: number[] = []
   let idx = 0
   while ((idx = buf.indexOf(ZSTD_MAGIC, idx)) !== -1) {
     frames.push(idx)
@@ -33,7 +85,7 @@ export function scanFrames(buf) {
  * Torn / incomplete final frames are skipped silently (the durable backend
  * may leave an interrupted append).
  */
-export function decompressSession(buf) {
+export function decompressSession(buf: Buffer): string {
   const frames = scanFrames(buf)
   let all = ''
   for (let i = 0; i < frames.length; i++) {
@@ -49,33 +101,33 @@ export function decompressSession(buf) {
 }
 
 /** Parse a decompressed artifact into event objects (JSONL lines). */
-export function parseEvents(plaintext) {
+export function parseEvents(plaintext: string): SessionEvent[] {
   return plaintext
     .split('\n')
     .filter(Boolean)
     .map((line) => {
       try {
-        return JSON.parse(line)
+        return JSON.parse(line) as SessionEvent
       } catch {
         return null
       }
     })
-    .filter(Boolean)
+    .filter((e): e is SessionEvent => Boolean(e))
 }
 
 /** Extract the session header (first `session` record). */
-export function sessionHeader(events) {
+export function sessionHeader(events: SessionEvent[]): SessionEvent | null {
   return events.find((e) => e.type === 'session') ?? null
 }
 
 /** Extract the session title event if present. */
-export function sessionTitle(events) {
+export function sessionTitle(events: SessionEvent[]): string | null {
   const t = events.find((e) => e.type === 'session/title')
   return t?.data?.title ?? null
 }
 
 /** Decode a text part (text / reasoning / tool-result content). */
-function textOf(part) {
+function textOf(part: any): string {
   if (!part) return ''
   if (typeof part === 'string') return part
   if (typeof part.text === 'string') return part.text
@@ -86,18 +138,18 @@ function textOf(part) {
 }
 
 /** Stable integer time for one event (ms since epoch). */
-function evtTime(e) {
+function evtTime(e: SessionEvent): number {
   const t = typeof e.time === 'number' ? e.time : e.time0
   return typeof t === 'number' && Number.isFinite(t) ? t : 0
 }
 
 /** Summary of one tool result (text) with a short preview. */
-function toolResultText(data) {
+function toolResultText(data: any): string {
   const msg = data?.message
   if (!msg) return ''
   const parts = Array.isArray(msg.content) ? msg.content : []
   const texts = parts
-    .map((p) => {
+    .map((p: any) => {
       if (p?.type === 'tool-result' || p?.type === 'tool_result') {
         return textOf(p.content)
       }
@@ -117,7 +169,7 @@ function toolResultText(data) {
  *
  * @returns {{header: object, title: string|null, frames: object[]}}
  */
-export function buildTimeline(events) {
+export function buildTimeline(events: SessionEvent[]): TimelineResult {
   const header = sessionHeader(events)
   const title = sessionTitle(events)
 
@@ -126,54 +178,53 @@ export function buildTimeline(events) {
   // 2) assistant messages (final assembled, includes reasoning + text + tool calls)
   const assistantEvents = events.filter((e) => e.type === 'assistant/message')
   // 3) tool results keyed by callId
-  const resultsByCall = new Map()
+  const resultsByCall = new Map<string, { time: number; text: string; isError: boolean; callId: string }>()
   for (const e of events) {
     if (e.type !== 'tool/result') continue
-    const callId = e.data?.message?.source?.callId
+    const callId = e.data?.message?.source?.callId as string | undefined
     if (callId) {
       resultsByCall.set(callId, {
         time: evtTime(e),
         text: toolResultText(e.data),
-        isError: e.data?.message?.content?.some((p) => p?.isError),
+        isError: e.data?.message?.content?.some((p: any) => p?.isError) as boolean,
         callId,
       })
     }
   }
   // tool calls keyed by callId (first occurrence wins — the authoritative one)
-  const callsByEventSeq = new Map()
-  const callInfo = new Map()
+  const callInfo = new Map<string, { callId: string; name: string; arguments: string; time: number; seq: number }>()
   for (const e of events) {
     if (e.type !== 'tool/call') continue
-    const callId = e.data?.callId
+    const callId = e.data?.callId as string | undefined
     if (!callId || callInfo.has(callId)) continue
     callInfo.set(callId, {
       callId,
       name: e.data?.name ?? 'tool',
       arguments: e.data?.arguments ?? '',
       time: evtTime(e),
-      seq: e.seq,
+      seq: e.seq ?? 0,
     })
   }
 
   // Build frames in seq order by walking the merged event stream.
-  const frames = []
-  const userSeq = new Map()
+  const frames: ReplayFrame[] = []
+  const userSeq = new Map<number, SessionEvent>()
   for (const e of userEvents) userSeq.set(e.seq ?? 0, e)
 
   // Associate user messages with their turn, then emit in seq order.
   const allOrdered = [...events].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
 
   let lastTime = header?.createdAt ?? 0
-  const pushFrame = (frame) => {
+  const pushFrame = (frame: ReplayFrame) => {
     const t = frame.time
     frame.gapMs = lastTime ? Math.max(0, Math.min(t - lastTime, 60_000)) : 0
     lastTime = t
     frames.push(frame)
   }
 
-  const emittedUsers = new Set()
-  const emittedAssistants = new Set()
-  const emittedTools = new Set()
+  const emittedUsers = new Set<number>()
+  const emittedAssistants = new Set<number>()
+  const emittedTools = new Set<number>()
 
   for (const e of allOrdered) {
     const seq = e.seq ?? 0
@@ -196,11 +247,11 @@ export function buildTimeline(events) {
     if (e.type === 'assistant/message' && !emittedAssistants.has(seq)) {
       emittedAssistants.add(seq)
       const content = Array.isArray(e.data?.message?.content) ? e.data.message.content : []
-      const reasoning = content.filter((p) => p?.type === 'reasoning').map(textOf).filter(Boolean).join('\n')
-      const text = content.filter((p) => p?.type === 'text').map(textOf).filter(Boolean).join('\n')
+      const reasoning = content.filter((p: any) => p?.type === 'reasoning').map(textOf).filter(Boolean).join('\n')
+      const text = content.filter((p: any) => p?.type === 'text').map(textOf).filter(Boolean).join('\n')
       const toolCalls = content
-        .filter((p) => p?.type === 'tool-call' || p?.type === 'tool_call')
-        .map((p) => ({
+        .filter((p: any) => p?.type === 'tool-call' || p?.type === 'tool_call')
+        .map((p: any) => ({
           callId: p.id ?? p.callId,
           name: p.name ?? 'tool',
           arguments: p.arguments ?? p.input ?? '',
@@ -219,8 +270,8 @@ export function buildTimeline(events) {
 
     if (e.type === 'tool/call' && !emittedTools.has(seq)) {
       emittedTools.add(seq)
-      const callId = e.data?.callId
-      const info = callInfo.get(callId) ?? {
+      const callId = e.data?.callId as string | undefined
+      const info = callInfo.get(callId ?? '') ?? {
         callId,
         name: e.data?.name ?? 'tool',
         arguments: e.data?.arguments ?? '',
@@ -230,9 +281,9 @@ export function buildTimeline(events) {
         callId,
         name: info.name,
         arguments: info.arguments,
-        result: resultsByCall.get(callId)?.text ?? null,
-        isError: resultsByCall.get(callId)?.isError ?? false,
-        resultTime: resultsByCall.get(callId)?.time ?? 0,
+        result: resultsByCall.get(callId ?? '')?.text ?? null,
+        isError: resultsByCall.get(callId ?? '')?.isError ?? false,
+        resultTime: resultsByCall.get(callId ?? '')?.time ?? 0,
         time: evtTime(e),
         seq,
       })
@@ -243,7 +294,7 @@ export function buildTimeline(events) {
 }
 
 /** Convenience: read + decompress + build timeline from a session file path. */
-export function extractFromFile(filePath) {
+export function extractFromFile(filePath: string) {
   const buf = readFileSync(filePath)
   const plain = decompressSession(buf)
   const events = parseEvents(plain)
@@ -251,8 +302,8 @@ export function extractFromFile(filePath) {
 }
 
 /** List every session artifact under a DSH sessions root. */
-export function scanSessions(root) {
-  const out = []
+export function scanSessions(root: string): SessionSummary[] {
+  const out: SessionSummary[] = []
   const projects = readdirSync(root, { withFileTypes: true })
   for (const proj of projects) {
     if (!proj.isDirectory()) continue

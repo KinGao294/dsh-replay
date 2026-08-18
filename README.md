@@ -1,8 +1,12 @@
-# dsh-replay
+# dsh-session-replay
 
 > DeepSeek Harness 会话链接回放插件：把任意对话生成可分享的动画回放，像看录屏一样回顾 Agent 的每一步。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/KinGao294/dsh-replay/actions/workflows/ci.yml/badge.svg)](https://github.com/KinGao294/dsh-replay/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/dsh-session-replay.svg)](https://www.npmjs.com/package/dsh-session-replay)
+
+> 🌐 [English README](README.en.md) / 中文
 
 ## ✨ 功能
 
@@ -16,12 +20,15 @@
 ## 📦 安装
 
 ```sh
-# 方式一：从本仓库安装
-git clone https://github.com/<your-name>/dsh-replay.git
+# 方式一：npm（推荐）
+dsh plugin --profile web add dsh-session-replay
+
+# 方式二：从本仓库安装
+git clone https://github.com/KinGao294/dsh-replay.git
 cd dsh-replay
 dsh plugin --profile web add link:$(pwd)
 
-# 方式二：本地路径安装
+# 方式三：本地路径安装
 dsh plugin --profile web add /path/to/dsh-replay
 ```
 
@@ -72,6 +79,17 @@ npx dsh-replay serve [port]              # 本地静态服务（默认 8931）
 - 分享链接本身即访问凭证：拿到完整 URL 的人可以打开该会话回放（含工具输出）。分享前注意敏感信息。
 - 公网回放内容会经过隧道提供商（如 Cloudflare）传输。
 - 本机回放（一比一 GUI）依赖 `session.list` RPC 可用；远程访问自动降级为独立播放器。
+
+## 🧪 开发
+
+```sh
+npm install
+npm run build   # TypeScript 类型检查（tsc --noEmit）
+npm test        # 单元测试（node:test + tsx）
+npm pack        # 校验发布包内容
+```
+
+CI（GitHub Actions）在每次 push/PR 时自动跑构建 + 测试；推送 `v*` tag 自动发布 npm（见 `.github/workflows/publish.yml`）。
 
 ## 📄 License
 

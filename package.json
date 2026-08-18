@@ -1,5 +1,5 @@
 {
-  "name": "dsh-replay",
+  "name": "dsh-session-replay",
   "version": "0.1.0",
   "description": "DeepSeek Harness 会话链接回放：把任意对话生成可分享的动画回放链接（Manus 风格），支持倍速、工具卡片、思考过程，并可导出自包含 HTML 离线分享。",
   "type": "module",
@@ -21,8 +21,14 @@
     "bin",
     "cordis.patch.yml",
     "README.md",
+    "README.en.md",
     "LICENSE"
   ],
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "prepack": "npm run build && npm test"
+  },
   "engines": {
     "node": ">=22"
   },
@@ -38,5 +44,21 @@
     "share",
     "session"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "author": "KinGao294",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KinGao294/dsh-replay.git"
+  },
+  "homepage": "https://github.com/KinGao294/dsh-replay#readme",
+  "bugs": {
+    "url": "https://github.com/KinGao294/dsh-replay/issues"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-host-webserver": "0.0.1-rc.1",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
 }

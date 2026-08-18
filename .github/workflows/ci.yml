@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build & Test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check (tsc --noEmit)
+        run: npm run build
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Verify publishable tarball
+        run: npm pack --dry-run
+
+  lint-package:
+    name: Package metadata sanity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate dsh bundle patch exists
+        run: |
+          node -e "
+            const p = require('./package.json');
+            const fs = require('fs');
+            const patch = p.dsh?.bundle?.patch;
+            if (!patch) throw new Error('missing dsh.bundle.patch');
+            if (!fs.existsSync(patch)) throw new Error('patch file not found: ' + patch);
+            console.log('dsh.bundle.patch OK:', patch);
+          "
+
+      - name: Confirm files whitelist covers everything needed
+        run: |
+          node -e "
+            const p = require('./package.json');
+            const fs = require('fs');
+            const needed = ['src', 'assets', 'bin', 'cordis.patch.yml', 'README.md', 'README.en.md', 'LICENSE'];
+            for (const n of needed) {
+              if (!p.files.includes(n)) throw new Error('files[] missing: ' + n);
+              if (n.includes('.')) { if (!fs.existsSync(n)) throw new Error('file missing on disk: ' + n); }
+              else { if (!fs.existsSync(n)) throw new Error('dir missing on disk: ' + n); }
+            }
+            console.log('files[] covers all needed entries');
+          "

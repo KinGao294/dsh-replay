@@ -25,7 +25,6 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-host-webserver'
 import { scanSessions } from './extract.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -131,7 +130,7 @@ export function apply(ctx: Context) {
 
       if (remote) {
         const { renderStandalone } = await import('./standalone.ts')
-        const html = renderStandalone(chosen.file, chosen.title, list)
+        const html = renderStandalone(chosen.file, chosen.title)
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
         res.end(html)
         return
@@ -202,7 +201,7 @@ export function apply(ctx: Context) {
         return
       }
       const { renderStandalone } = await import('./standalone.ts')
-      const html = renderStandalone(chosen.file, chosen.title, list)
+      const html = renderStandalone(chosen.file, chosen.title)
       const filename = 'dsh-replay-' + sessionId.slice(0, 24) + '.html'
       res.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
