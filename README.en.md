@@ -13,6 +13,7 @@
 - **Pixel-identical native UI** (local access): `/replay/<id>` reuses the real DSH GUI rendering (the same `__DSH_BOOT__` plus all plugins), with replay controls overlaid on the native interface.
 - **Standalone HTML export**: generates a self-contained HTML file (data embedded, no DSH required, fully offline) — the safest way to share with someone on a different machine.
 - **Single-session sharing**: there is no session list page; only the conversation you selected is shared, other sessions stay invisible.
+- **Automatic sensitive-info redaction**: when generating a share link / exported HTML, API keys, tokens (OpenAI/Anthropic/GitHub/npm/AWS/Slack/JWT/Bearer), passwords, private keys and connection-string credentials are detected and masked automatically — keys you pasted casually in chat never leave with the link, no manual review needed (local 1:1 replay keeps the original text).
 - **GUI integration**: a new **「🔗 Share Replay」** item appears in the session context menu (above *Rename*) — one click to copy the link / download the HTML.
 
 ## 📦 Install
