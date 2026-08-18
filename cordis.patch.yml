@@ -1,0 +1,11 @@
+# dsh-replay bundle patch: mounts the session-replay routes on the shared
+# webserver. The plugin serves:
+#   /replay/<sessionId>   — pixel-identical replay (local) or standalone
+#                           player (remote/tunnel), never a session list
+#   /api/replay/sessions  — session index for the GUI share button
+#   /api/replay/export/<id> — self-contained replay HTML download
+# and injects the 「分享回放」 item into the GUI's native session context
+# menu (above 重命名).
+- insert:
+    - id: replay
+      name: dsh-replay
